@@ -7,15 +7,15 @@ module Core
      input wire rst);
 
     reg execution_lock;
-    reg [EXCEPTION_LEN - 1 : 0] exception;
-    wire cpu_rst = rst || (exception != EXCEP_ENV_BREAK && exception != EXCEP_OK);
+    reg [`EXCEPTION_LEN - 1 : 0] exception;
+    wire cpu_rst = rst || (exception != `EXCEP_ENV_BREAK && exception != `EXCEP_OK);
 
     wire [31 : 0] instruction;
     wire [31 : 0] pc;
     wire [31 : 0] pc_write;
     wire pc_flush;
     wire if_exec_lock_set;
-    wire [EXCEPTION_LEN - 1 : 0] if_exception;
+    wire [`EXCEPTION_LEN - 1 : 0] if_exception;
     InstructionFetch instr_fetch(.clk(clk),
                                  .rst(cpu_rst),
 
@@ -41,7 +41,7 @@ module Core
     wire [31 : 0] resource1;
     wire [31 : 0] resource2;
     wire [31 : 0] offset;
-    wire [EXCEPTION_LEN - 1 : 0] id_exception;
+    wire [`EXCEPTION_LEN - 1 : 0] id_exception;
     InstructionDecode instr_decode(.instr_In(instruction),
 
                                    .rs1Addr_Out(rs1_address),
@@ -64,7 +64,7 @@ module Core
     wire [31 : 0] rd_data;
     wire rd_enable;
     wire ex_exec_lock_set;
-    wire [EXCEPTION_LEN - 1 : 0] ex_exception;
+    wire [`EXCEPTION_LEN - 1 : 0] ex_exception;
     Executor executor(.clk(clk),
                       .rst(cpu_rst),
 
@@ -109,15 +109,15 @@ module Core
         else
             execution_lock = 0;
 
-        if (exception == EXCEP_ENV_BREAK)
+        if (exception == `EXCEP_ENV_BREAK)
             execution_lock = 1;
     end
 
     always @(*)
     begin
-        if (if_exception != EXCEP_OK)
+        if (if_exception != `EXCEP_OK)
             exception = if_exception;
-        else if (id_exception != EXCEP_OK)
+        else if (id_exception != `EXCEP_OK)
             exception = if_exception;
         else
             exception = ex_exception;

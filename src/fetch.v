@@ -15,7 +15,7 @@ module InstructionFetch
      input wire execLockRead_In,
      output wire execLockSet_Out,
 
-     output wire [EXCEPTION_LEN - 1 : 0] exception_Out);
+     output wire [`EXCEPTION_LEN - 1 : 0] exception_Out);
 
     reg [31 : 0] ir;
     reg [31 : 0] pc;
@@ -44,7 +44,7 @@ module InstructionFetch
     always @(posedge clk)
     begin
         if (rst)
-            pc <= BOOT_ADDR;
+            pc <= `BOOT_ADDR;
         else if (should_flush)
             pc <= pcWrite_In;
         else if (should_step) // Sync PC update with IR
