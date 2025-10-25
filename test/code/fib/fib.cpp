@@ -9,11 +9,9 @@ std::uint32_t fib(std::uint32_t i)
 }
 
 constexpr std::uint32_t io_addr = 0x60000000;
-constexpr std::uint32_t fib_count = 5;
+constexpr std::uint32_t fib_count = 10;
 
 int main(void)
 {
-    const auto num = static_cast<std::uint8_t>(fib(fib_count));
-
-    *reinterpret_cast<std::uint32_t *>(io_addr) = num;
+    *reinterpret_cast<std::uint32_t *>(io_addr) = fib(fib_count);
 }

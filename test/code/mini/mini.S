@@ -62,9 +62,10 @@ main:
     slti x14, x2, 0         # x14 = 1 (Signed: -15 < 0)
     sltiu x15, x2, 10       # x15 = 0 (Unsigned: Large > 10)
     xor x30, x30, x14       # x30 = 6 ^ 1 = 7
-    lui x14, 0x1007         # x14 = 0x1007
+    li x14, 0x1007          # x14 = 0x1007
     or x30, x30, x14        # x30 = 7 | 0x1007 = 0x1007
-    andi x30, x30, 0xFF     # x30 = 0x1007
+    li x14, 0xFFFF          # x14 = 0xFFFF
+    and x30, x30, x14       # x30 = 0x1007
     
     # ----------------------------------------------------
     # 4. S/L-type Instructions (Memory Access)
@@ -108,7 +109,7 @@ jump_target_1:
     addi x30, x30, 0x1       # Should NOT execute (failure check)
     
 jump_return:
-    lui x14, 0x1000
+    li x14, 0x1000
     add x30, x30, x14     # x30 = 0x110 + 0x1000 = 0x1110 (Jump test passed)
 
     # ----------------------------------------------------

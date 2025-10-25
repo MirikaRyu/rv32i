@@ -8,18 +8,6 @@
 
 class ram_t
 {
-private:
-    std::unordered_map<uint32_t, std::vector<uint8_t>> memory_;
-    uint8_t init_value_;
-
-    static constexpr auto PAGE_SIZE = 4uz * (2 << 10);
-
-public:
-    explicit ram_t(uint8_t init_val = 0) noexcept
-        : memory_{}, init_value_{init_val}
-    {
-    }
-
 public:
     enum access_width
     {
@@ -29,19 +17,35 @@ public:
         BYTE,
     };
 
+private:
+    std::unordered_map<uint32_t, std::vector<uint8_t>> memory_;
+    uint8_t init_value_;
+
+    static constexpr auto PAGE_SIZE = 4uz * (1 << 10);
+
+    static uint8_t get_bytes(access_width width) noexcept
+    {
+        return (width == WORD) ? 4 : (4 - static_cast<uint8_t>(width));
+    }
+
+public:
+    explicit ram_t(uint8_t init_val = 0) noexcept
+        : memory_{}, init_value_{init_val}
+    {
+    }
+
     void write(uint32_t addr, access_width width, uint32_t data)
     {
-        const auto w = static_cast<uint8_t>(width);
-        if (w == 0 || w > 3)
-            throw std::runtime_error{std::format("Invalid memory access width: {}", w)};
+        if (width == NONE || width > BYTE)
+            throw std::runtime_error{std::format("Invalid memory access width: {}", static_cast<uint8_t>(width))};
 
-        for (const auto offset : std::views::iota(0, 4 - w))
+        for (const auto offset : std::views::iota(0u, get_bytes(width)))
         {
             const size_t page_num = addr / PAGE_SIZE;
 
             if (!memory_.contains(page_num))
                 memory_.emplace(page_num, std::vector<uint8_t>(PAGE_SIZE, init_value_));
-            memory_[page_num][addr % PAGE_SIZE] = static_cast<uint8_t>(data >>= 8 * offset);
+            memory_[page_num][addr % PAGE_SIZE] = static_cast<uint8_t>(data >> 8 * offset);
 
             ++addr;
         }
@@ -49,16 +53,15 @@ public:
 
     uint32_t read(uint32_t addr, access_width width) const
     {
-        const auto w = static_cast<uint8_t>(width);
-        if (w == 0 || w > 3)
-            throw std::runtime_error{std::format("Invalid memory access width: {}", w)};
+        if (width == NONE || width > BYTE)
+            throw std::runtime_error{std::format("Invalid memory access width: {}", static_cast<uint8_t>(width))};
 
         uint32_t ret{};
-        for (const auto offset : std::views::iota(0, 4 - w))
+        for (const auto offset : std::views::iota(0u, get_bytes(width)))
         {
             const size_t page_num = addr / PAGE_SIZE;
 
-            if (!memory_.contains(page_num))
+            if (memory_.contains(page_num))
                 ret |= memory_.at(page_num)[addr % PAGE_SIZE] << 8 * offset;
             else
                 ret |= init_value_ << 8 * offset;
