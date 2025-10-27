@@ -3,7 +3,7 @@
 
 .global main
 main:
-    li s0, 0x60000000           # Load IO base address
+    li s0, 0xc0000000           # Load IO base address
     li t1, 0x000000ff           # Data to write, only low 8-bits valid
 
     li t0, 0x6

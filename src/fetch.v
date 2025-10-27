@@ -15,6 +15,17 @@ module InstructionFetch
      input wire execLockRead_In,
      output wire execLockSet_Out,
 
+     // Memory access
+     output reg [31 : 0] memAddr_Out,
+     output reg [31 : 0] memData_Out,
+     output reg [1 : 0] memDataWidth_Out,
+     output reg memIsRead_Out,
+     output wire memAccess_Out,
+
+     input wire memAccessOK_In,
+     input wire [31 : 0] memData_In,
+     input wire [`EXCEPTION_LEN - 1 : 0] memException_In,
+
      output wire [`EXCEPTION_LEN - 1 : 0] exception_Out);
 
     reg [31 : 0] ir;
@@ -28,15 +39,16 @@ module InstructionFetch
     assign pc_Out = pc;
     assign execLockSet_Out = !(rom_read_enable && rom_output_valid) && !pcFlush_In;
 
-    ROMAccess instr_rom(.clk(clk),
-                        .rst(rst),
+    // Memory access
+    assign memAddr_Out = pc;
+    assign memData_Out = 0;
+    assign memDataWidth_Out = `MEM_WIDTH_WORD;
+    assign memIsRead_Out = 1'b1;
+    assign memAccess_Out = rom_read_enable;
 
-                        .addr_In(pc),
-                        .inputValid_In(rom_read_enable),
-
-                        .exception_Out(exception_Out),
-                        .instr_Out(rom_instr),
-                        .outputValid_Out(rom_output_valid));
+    assign rom_output_valid = memAccessOK_In;
+    assign rom_instr = memData_In;
+    assign exception_Out = memException_In;
 
     wire should_flush = !execLockRead_In && pcFlush_In;
     wire should_step = !execLockRead_In && rom_output_valid && rom_read_enable;

@@ -6,27 +6,15 @@
 #include <unordered_map>
 #include <vector>
 
+#include "mock.hpp"
+
 class ram_t
 {
-public:
-    enum access_width
-    {
-        NONE,
-        WORD,
-        HALF,
-        BYTE,
-    };
-
 private:
     std::unordered_map<uint32_t, std::vector<uint8_t>> memory_;
     uint8_t init_value_;
 
     static constexpr auto PAGE_SIZE = 4uz * (1 << 10);
-
-    static uint8_t get_bytes(access_width width) noexcept
-    {
-        return (width == WORD) ? 4 : (4 - static_cast<uint8_t>(width));
-    }
 
 public:
     explicit ram_t(uint8_t init_val = 0) noexcept
@@ -34,12 +22,13 @@ public:
     {
     }
 
+public:
     void write(uint32_t addr, access_width width, uint32_t data)
     {
         if (width == NONE || width > BYTE)
-            throw std::runtime_error{std::format("Invalid memory access width: {}", static_cast<uint8_t>(width))};
+            throw std::runtime_error{std::format("Invalid RAM access width: {}", static_cast<uint8_t>(width))};
 
-        for (const auto offset : std::views::iota(0u, get_bytes(width)))
+        for (const auto offset : std::views::iota(0u, width_to_byte(width)))
         {
             const size_t page_num = addr / PAGE_SIZE;
 
@@ -54,10 +43,10 @@ public:
     uint32_t read(uint32_t addr, access_width width) const
     {
         if (width == NONE || width > BYTE)
-            throw std::runtime_error{std::format("Invalid memory access width: {}", static_cast<uint8_t>(width))};
+            throw std::runtime_error{std::format("Invalid RAM access width: {}", static_cast<uint8_t>(width))};
 
         uint32_t ret{};
-        for (const auto offset : std::views::iota(0u, get_bytes(width)))
+        for (const auto offset : std::views::iota(0u, width_to_byte(width)))
         {
             const size_t page_num = addr / PAGE_SIZE;
 
@@ -82,30 +71,35 @@ static ram_t ram{};
 
 extern "C" int ram_read(int addr, uint8_t width)
 {
-    return static_cast<int>(ram.read(static_cast<uint32_t>(addr), static_cast<ram_t::access_width>(width)));
+    return static_cast<int>(ram.read(static_cast<uint32_t>(addr), static_cast<access_width>(width)));
 }
 
 extern "C" void ram_write(int addr, uint8_t width, int data)
 {
-    ram.write(static_cast<uint32_t>(addr), static_cast<ram_t::access_width>(width), static_cast<uint32_t>(data));
+    ram.write(static_cast<uint32_t>(addr), static_cast<access_width>(width), static_cast<uint32_t>(data));
 }
 
-void ram_set_initial(uint8_t data = 0) noexcept
+uint32_t ram_get_value(uint32_t addr)
 {
-    ram.set_init_value(data);
+    return ram.read(addr, WORD);
 }
 
 void ram_set_value(uint32_t addr, uint8_t data)
 {
-    ram_write(static_cast<int>(addr), 3, static_cast<int>(data));
+    ram.write(addr, BYTE, data);
 }
 
 void ram_set_value(uint32_t addr, uint16_t data)
 {
-    ram_write(static_cast<int>(addr), 2, static_cast<int>(data));
+    ram.write(addr, HALF, data);
 }
 
 void ram_set_value(uint32_t addr, uint32_t data)
 {
-    ram_write(static_cast<int>(addr), 1, static_cast<int>(data));
+    ram.write(addr, WORD, data);
+}
+
+void ram_set_default(uint8_t data) noexcept
+{
+    ram.set_init_value(data);
 }

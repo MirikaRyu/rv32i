@@ -22,7 +22,7 @@
 #include "test_app___024root.h"
 
 // Max iterations
-constexpr size_t max_iter = 0xffffffff;
+constexpr size_t max_iter = 0xffff;
 
 int main(int argc, char *argv[])
 {
@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
     else if (std::ifstream code{argv[2], std::ios::in | std::ios::binary})
     {
         std::vector<uint8_t> code_data{std::istreambuf_iterator<char>{code}, std::istreambuf_iterator<char>{}};
-        rom_set_initial(std::move(code_data));
+        rom_set_current(std::move(code_data));
     }
     else
     {

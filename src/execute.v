@@ -3,49 +3,42 @@
 `include "constants.v"
 
 module Executor
-    (input wire clk,
-     input wire rst,
+    (
+        // Regs to write
+        output reg [4 : 0] rdAddr_Out,
+        output reg [31 : 0] rdWrite_Out,
+        output reg rdEnable_Out,
 
-     output reg [4 : 0] rdAddr_Out,
-     output reg [31 : 0] rdWrite_Out,
-     output reg rdEnable_Out,
+        output reg [31 : 0] pcWrite_Out,
+        output reg pcFlush_Out,
 
-     output reg [31 : 0] pcWrite_Out,
-     output reg pcFlush_Out,
+        // Opcode and operand
+        input wire [5 : 0] opCode_In,
+        input wire [4 : 0] rdAddr_In,
+        input wire [31 : 0] resource1_In,
+        input wire [31 : 0] resource2_In,
+        input wire [31 : 0] offset_In,
+        input wire [31 : 0] pc_In,
 
-     input wire [5 : 0] opCode_In,
-     input wire [4 : 0] rdAddr_In,
-     input wire [31 : 0] resource1_In,
-     input wire [31 : 0] resource2_In,
-     input wire [31 : 0] offset_In,
-     input wire [31 : 0] pc_In,
+        // Memory access
+        output reg [31 : 0] memAddr_Out,
+        output reg [31 : 0] memData_Out,
+        output reg [1 : 0] memDataWidth_Out,
+        output reg memIsRead_Out,
+        output wire memAccess_Out,
 
-     input wire execLockRead_In,
-     output reg execLockSet_Out,
+        input wire memAccessOK_In,
+        input wire [31 : 0] memData_In,
+        input wire [`EXCEPTION_LEN - 1 : 0] memException_In,
 
-     output reg [`EXCEPTION_LEN - 1 : 0] exception_Out);
+        // Execution lock
+        input wire execLockRead_In,
+        output reg execLockSet_Out,
 
-    reg [31 : 0] mem_addr;
-    reg [31 : 0] mem_data;
-    reg [1 : 0] mem_width;
-    reg is_mem_read;
+        output reg [`EXCEPTION_LEN - 1 : 0] exception_Out);
+
     reg try_access_mem;
-    wire [`EXCEPTION_LEN - 1 : 0] mem_exception;
-    wire [31 : 0] mem_data_out;
-    wire mem_ready;
-    wire access_mem = try_access_mem && !mem_ready;
-    RAMAccess data_mem(.clk(clk),
-                       .rst(rst),
-
-                       .addr_In(mem_addr),
-                       .data_In(mem_data),
-                       .dataWidth_In(mem_width),
-                       .isRead_In(is_mem_read),
-                       .inputValid_In(access_mem),
-
-                       .exception_Out(mem_exception),
-                       .data_Out(mem_data_out),
-                       .operationOK_Out(mem_ready));
+    assign memAccess_Out = !memAccessOK_In && try_access_mem;
 
     reg [31 : 0] alu_inputA;
     reg [31 : 0] alu_inputB;
@@ -81,14 +74,14 @@ module Executor
         pc_alu_input = offset_In;
         pcFlush_Out = 0;
 
-        mem_addr = alu_result;
-        mem_data = 0;
-        mem_width = `MEM_WIDTH_NONE;
-        is_mem_read = 1;
+        memAddr_Out = alu_result;
+        memData_Out = 0;
+        memDataWidth_Out = `MEM_WIDTH_NONE;
+        memIsRead_Out = 1;
         try_access_mem = 0;
 
-        execLockSet_Out = access_mem;
-        exception_Out = mem_exception;
+        execLockSet_Out = memAccess_Out;
+        exception_Out = memException_In;
 
         case (opCode_In)
             // Arithmetic instructions
@@ -126,30 +119,30 @@ module Executor
             `INSTR_OP_LOAD_WORD: begin
                 alu_op = `INSTR_ALU_ADD;
 
-                mem_width = `MEM_WIDTH_WORD;
-                rdWrite_Out = mem_data_out;
+                memDataWidth_Out = `MEM_WIDTH_WORD;
+                rdWrite_Out = memData_In;
                 try_access_mem = 1;
             end
 
             `INSTR_OP_LOAD_HALF, `INSTR_OP_LOAD_HALF_UNSIGN: begin
                 alu_op = `INSTR_ALU_ADD;
 
-                mem_width = `MEM_WIDTH_HALF;
+                memDataWidth_Out = `MEM_WIDTH_HALF;
                 if (opCode_In == `INSTR_OP_LOAD_HALF)
-                    rdWrite_Out = {{16{mem_data_out[15]}}, mem_data_out[15 : 0]};
+                    rdWrite_Out = {{16{memData_In[15]}}, memData_In[15 : 0]};
                 else
-                    rdWrite_Out = {16'b0, mem_data_out[15 : 0]};
+                    rdWrite_Out = {16'b0, memData_In[15 : 0]};
                 try_access_mem = 1;
             end
 
             `INSTR_OP_LOAD_BYTE, `INSTR_OP_LOAD_BYTE_UNSIGN: begin
                 alu_op = `INSTR_ALU_ADD;
 
-                mem_width = `MEM_WIDTH_BYTE;
+                memDataWidth_Out = `MEM_WIDTH_BYTE;
                 if (opCode_In == `INSTR_OP_LOAD_BYTE)
-                    rdWrite_Out = {{24{mem_data_out[7]}}, mem_data_out[7 : 0]};
+                    rdWrite_Out = {{24{memData_In[7]}}, memData_In[7 : 0]};
                 else
-                    rdWrite_Out = {24'b0, mem_data_out[7 : 0]};
+                    rdWrite_Out = {24'b0, memData_In[7 : 0]};
                 try_access_mem = 1;
             end
 
@@ -160,16 +153,16 @@ module Executor
 
                 case (opCode_In)
                     `INSTR_OP_STORE_WORD:
-                        mem_width = `MEM_WIDTH_WORD;
+                        memDataWidth_Out = `MEM_WIDTH_WORD;
                     `INSTR_OP_STORE_HALF:
-                        mem_width = `MEM_WIDTH_HALF;
+                        memDataWidth_Out = `MEM_WIDTH_HALF;
                     `INSTR_OP_STORE_BYTE:
-                        mem_width = `MEM_WIDTH_BYTE;
+                        memDataWidth_Out = `MEM_WIDTH_BYTE;
                     default:
-                        mem_width = `MEM_WIDTH_NONE;
+                        memDataWidth_Out = `MEM_WIDTH_NONE;
                 endcase
-                mem_data = resource2_In;
-                is_mem_read = 0;
+                memData_Out = resource2_In;
+                memIsRead_Out = 0;
                 try_access_mem = 1;
             end
 

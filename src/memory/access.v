@@ -2,168 +2,205 @@
 
 `include "src/constants.v"
 
-// Instruction ROM Address Space: [0, 1GiB)
-// Accessible: [0, 64KiB)
-module ROMAccess
+`define ACCESS_TYPE_ROM 2'b01
+`define ACCESS_TYPE_RAM 2'b10
+`define ACCESS_TYPE_IO 2'b11
+
+// Find out which hardware the port will use
+`define GET_ACCESS_TYPE(port)                                                                                          \
+    reg [1 : 0] port``_access_type;                                                                                    \
+    always @(*)                                                                                                        \
+    begin                                                                                                              \
+                                                                                                                       \
+        if (~|port``_addr_In[31 : 30])                                                                                 \
+            port``_access_type = `ACCESS_TYPE_ROM;                                                                     \
+        else if (^port``_addr_In[31 : 30])                                                                             \
+            port``_access_type = `ACCESS_TYPE_RAM;                                                                     \
+        else                                                                                                           \
+            port``_access_type = `ACCESS_TYPE_IO;                                                                      \
+    end
+
+// Connect a port to a specific part
+`define CONNECT_PORT(port)                                                                                             \
+    case (port``_access_type)                                                                                          \
+        `ACCESS_TYPE_ROM: begin                                                                                        \
+            addrROM_Out = {2'b0, port``_addr_In[29 : 0]};                                                              \
+            dataWidthROM_Out = port``_dataWidth_In;                                                                    \
+            selectROM_Out = port``_inputValid_In;                                                                      \
+                                                                                                                       \
+            port``_operation_OK = ROMFinish_In;                                                                        \
+            port``_data = ROMData_In;                                                                                  \
+        end                                                                                                            \
+        `ACCESS_TYPE_RAM: begin                                                                                        \
+            if (port``_addr_In[31 : 30] == 2'b01)                                                                      \
+                addrRAM_Out = {2'b0, port``_addr_In[29 : 0]};                                                          \
+            else                                                                                                       \
+                addrRAM_Out = {2'b01, port``_addr_In[29 : 0]};                                                         \
+            dataRAM_Out = port``_data_In;                                                                              \
+            dataWidthRAM_Out = port``_dataWidth_In;                                                                    \
+            isReadRAM_Out = port``_isRead_In;                                                                          \
+            selectRAM_Out = port``_inputValid_In;                                                                      \
+                                                                                                                       \
+            port``_operation_OK = RAMFinish_In;                                                                        \
+            port``_data = RAMData_In;                                                                                  \
+        end                                                                                                            \
+        `ACCESS_TYPE_IO: begin                                                                                         \
+            addrIO_Out = {2'b0, port``_addr_In[29 : 0]};                                                               \
+            dataIO_Out = port``_data_In;                                                                               \
+            dataWidthIO_Out = port``_dataWidth_In;                                                                     \
+            isReadIO_Out = port``_isRead_In;                                                                           \
+            selectIO_Out = port``_inputValid_In;                                                                       \
+                                                                                                                       \
+            port``_operation_OK = IOFinish_In;                                                                         \
+            port``_data = IOData_In;                                                                                   \
+        end                                                                                                            \
+        default:                                                                                                       \
+            ;                                                                                                          \
+    endcase
+
+// Handle exceptions
+`define GEN_EXCEPTION(port)                                                                                            \
+    always @(*)                                                                                                        \
+    begin                                                                                                              \
+        port``_exception_Out = port``_isRead_In ? `EXCEP_INVALID_MEM_READ : `EXCEP_INVALID_MEM_WRITE;                  \
+                                                                                                                       \
+        if (!port``_inputValid_In)                                                                                     \
+            port``_exception_Out = `EXCEP_OK;                                                                          \
+        else                                                                                                           \
+        begin                                                                                                          \
+            if (port``_dataWidth_In == `MEM_WIDTH_BYTE)                                                                \
+                port``_exception_Out = `EXCEP_OK;                                                                      \
+            else if (port``_dataWidth_In == `MEM_WIDTH_HALF && ~port``_addr_In[0])                                     \
+                port``_exception_Out = `EXCEP_OK;                                                                      \
+            else if (port``_dataWidth_In == `MEM_WIDTH_WORD && ~|port``_addr_In[1 : 0])                                \
+                port``_exception_Out = `EXCEP_OK;                                                                      \
+                                                                                                                       \
+            case (port``_access_type)                                                                                  \
+                `ACCESS_TYPE_ROM:                                                                                      \
+                    port``_exception_Out = ROMException_In;                                                            \
+                `ACCESS_TYPE_RAM:                                                                                      \
+                    port``_exception_Out = RAMException_In;                                                            \
+                `ACCESS_TYPE_IO:                                                                                       \
+                    port``_exception_Out = IOException_In;                                                             \
+                default:                                                                                               \
+                    port``_exception_Out = port``_isRead_In ? `EXCEP_INVALID_MEM_READ : `EXCEP_INVALID_MEM_WRITE;      \
+            endcase                                                                                                    \
+        end                                                                                                            \
+    end
+
+module Access
     (input wire clk,
      input wire rst,
 
-     input wire [31 : 0] addr_In,
-     input wire inputValid_In,
+     // Interface for reading/writing memory
+     input wire [31 : 0] a_addr_In,
+     input wire [31 : 0] a_data_In,
+     input wire [1 : 0] a_dataWidth_In,
+     input wire a_isRead_In,
+     input wire a_inputValid_In,
+     output reg a_operationOK_Out,
+     output reg [31 : 0] a_data_Out,
+     output reg [`EXCEPTION_LEN - 1 : 0] a_exception_Out,
 
-     output wire [`EXCEPTION_LEN - 1 : 0] exception_Out,
-     output wire [31 : 0] instr_Out,
-     output wire outputValid_Out);
+     input wire [31 : 0] b_addr_In,
+     input wire [31 : 0] b_data_In,
+     input wire [1 : 0] b_dataWidth_In,
+     input wire b_isRead_In,
+     input wire b_inputValid_In,
+     output reg b_operationOK_Out,
+     output reg [31 : 0] b_data_Out,
+     output reg [`EXCEPTION_LEN - 1 : 0] b_exception_Out,
 
-    assign exception_Out = (addr_In >= 16'hffff || |addr_In[1 : 0]) ? `EXCEP_INVALID_MEM_READ : `EXCEP_OK;
+     // Interface for ROM
+     output reg [31 : 0] addrROM_Out,
+     output reg [1 : 0] dataWidthROM_Out,
+     output reg selectROM_Out,
 
-    InstrROM instr_rom(.clk(clk),
-                       .rst(rst),
+     input wire ROMFinish_In,
+     input wire [31 : 0] ROMData_In,
+     input wire [`EXCEPTION_LEN - 1 : 0] ROMException_In,
 
-                       .addr_In(addr_In[15 : 0]),
-                       .addrValid_In(inputValid_In),
+     // Interface for RAM
+     output reg [31 : 0] addrRAM_Out,
+     output reg [31 : 0] dataRAM_Out,
+     output reg [1 : 0] dataWidthRAM_Out,
+     output reg isReadRAM_Out,
+     output reg selectRAM_Out,
 
-                       .instr_Out(instr_Out),
-                       .instrValid_Out(outputValid_Out));
-endmodule
+     input wire RAMFinish_In,
+     input wire [31 : 0] RAMData_In,
+     input wire [`EXCEPTION_LEN - 1 : 0] RAMException_In,
 
-// Data RAM Address space: [1GiB, 4GiB)
-// Accessible: [1GiB, 1GiB + 512MiB), [1GiB + 512MiB, 1GiB + 512MiB + 4B)
-module RAMAccess
-    (input wire clk,
-     input wire rst,
+     // Interface for IO
+     output reg [31 : 0] addrIO_Out,
+     output reg [31 : 0] dataIO_Out,
+     output reg [1 : 0] dataWidthIO_Out,
+     output reg isReadIO_Out,
+     output reg selectIO_Out,
 
-     input wire [31 : 0] addr_In,
-     input wire [31 : 0] data_In,
-     input wire [1 : 0] dataWidth_In,
-     input wire isRead_In,
-     input wire inputValid_In,
+     input wire IOFinish_In,
+     input wire [31 : 0] IOData_In,
+     input wire [`EXCEPTION_LEN - 1 : 0] IOException_In);
 
-     output reg [`EXCEPTION_LEN - 1 : 0] exception_Out,
-     output reg [31 : 0] data_Out,
-     output reg operationOK_Out);
+    `GET_ACCESS_TYPE(a)
+    `GET_ACCESS_TYPE(b)
 
-    // Handle exceptions
-    always @(*)
-    begin
-        exception_Out = isRead_In ? `EXCEP_INVALID_MEM_READ : `EXCEP_INVALID_MEM_WRITE;
-
-        if (!inputValid_In)
-            exception_Out = `EXCEP_OK;
-        else if (32'h40000000 <= addr_In && addr_In < 32'h60000004)
-            if (dataWidth_In == `MEM_WIDTH_BYTE)
-                exception_Out = `EXCEP_OK;
-            else if (dataWidth_In == `MEM_WIDTH_HALF && ~addr_In[0])
-                exception_Out = `EXCEP_OK;
-            else if (dataWidth_In == `MEM_WIDTH_WORD && ~|addr_In[1 : 0])
-                exception_Out = `EXCEP_OK;
-    end
-
-    // RAM module
-    reg data_ram_enable;
-    wire [31 : 0] data_ram_out;
-    wire data_ram_operation_ok;
-    DataRAM data_ram(.clk(clk),
-                     .rst(rst),
-
-                     .addr_In(addr_In[28 : 0]),
-                     .data_In(data_In),
-                     .dataWidth_In(dataWidth_In),
-                     .isRead_In(isRead_In),
-                     .inputValid_In(data_ram_enable),
-
-                     .data_Out(data_ram_out),
-                     .operationOK_Out(data_ram_operation_ok));
-
-    // IO module
-    reg dev_write_ok;
-    reg dev_read_ok;
-    reg [31 : 0] dev_mask;
-    reg [31 : 0] dev_value;
-    wire [31 : 0] dev_state;
-    IO io(.clk(clk),
-          .rst(rst),
-
-          .devMask_In(dev_mask),
-          .devValue_In(dev_value),
-
-          .devState_Out(dev_state));
-
-    always @(posedge clk)
-    begin
-        if (rst)
-            dev_write_ok <= 0;
-        else
-            dev_write_ok <= inputValid_In;
-    end
-
-    always @(posedge clk)
-    begin
-        if (rst)
-            dev_read_ok <= 0;
-        else
-            dev_read_ok <= inputValid_In;
-    end
-
-    // Convert memory access to IO bit access
-    reg [3 : 0] byte_enable;
-    wire [31 : 0] mask = {{8{byte_enable[3]}}, {8{byte_enable[2]}}, {8{byte_enable[1]}}, {8{byte_enable[0]}}};
-
-    wire [31 : 0] io_data_word = data_In;
-    wire [31 : 0] io_data_half = {16'b0, data_In[15 : 0]} << (addr_In[1] << 4);
-    wire [31 : 0] io_data_byte = {24'b0, data_In[7 : 0]} << (addr_In[1 : 0] << 3);
-
-    reg [31 : 0] io_data_out;
-
-    always @(*)
-    begin
-        case (dataWidth_In)
-            `MEM_WIDTH_BYTE: begin
-                byte_enable = 4'b0001 << addr_In[1 : 0];
-                dev_value = io_data_byte;
-                io_data_out = (dev_state & mask) >> (addr_In[1 : 0] << 3);
-            end
-            `MEM_WIDTH_HALF: begin
-                byte_enable = addr_In[1] ? 4'b1100 : 4'b0011;
-                dev_value = io_data_half;
-                io_data_out = (dev_state & mask) >> (addr_In[1] << 4);
-            end
-            `MEM_WIDTH_WORD: begin
-                byte_enable = 4'b1111;
-                dev_value = io_data_word;
-                io_data_out = dev_state;
-            end
-            default: begin
-                byte_enable = 0;
-                dev_value = 0;
-                io_data_out = 0;
-            end
-        endcase
-    end
+    `GEN_EXCEPTION(a)
+    `GEN_EXCEPTION(b)
 
     // Dispatch memory access requests
+    reg a_operation_OK;
+    reg [31 : 0] a_data;
+    reg b_operation_OK;
+    reg [31 : 0] b_data;
     always @(*)
     begin
-        data_ram_enable = 0;
+        addrROM_Out = (addrRAM_Out = (addrIO_Out = 0));
+        dataRAM_Out = (dataIO_Out = 0);
+        dataWidthROM_Out = (dataWidthRAM_Out = (dataWidthIO_Out = 0));
+        isReadRAM_Out = (isReadIO_Out = 0);
+        selectROM_Out = (selectRAM_Out = (selectIO_Out = 0));
 
-        dev_mask = 0;
+        a_operation_OK = (b_operation_OK = 0);
+        a_data = (b_data = 0);
 
-        data_Out = 0;
-        operationOK_Out = 0;
-
-        if (addr_In < 32'h60000000) // Access RAM
+        if ((a_inputValid_In ^ b_inputValid_In) |
+            (a_inputValid_In & b_inputValid_In & (a_access_type != b_access_type)))
         begin
-            data_ram_enable = inputValid_In;
-
-            data_Out = isRead_In ? data_ram_out : 0;
-            operationOK_Out = data_ram_operation_ok;
+            if (a_inputValid_In)
+                `CONNECT_PORT(a)
+            if (b_inputValid_In)
+                `CONNECT_PORT(b)
         end
-        else // Access IO
-        begin
-            dev_mask = mask;
+        else if (a_inputValid_In & b_inputValid_In)
+            `CONNECT_PORT(b)
+    end
 
-            data_Out = io_data_out;
-            operationOK_Out = isRead_In ? dev_read_ok : dev_write_ok;
+    always @(posedge clk)
+    begin
+        if (rst)
+        begin
+            a_operationOK_Out <= 0;
+            a_data_Out <= 0;
+        end
+        else
+        begin
+            a_operationOK_Out <= a_operation_OK;
+            a_data_Out <= a_data;
+        end
+    end
+
+    always @(posedge clk)
+    begin
+        if (rst)
+        begin
+            b_operationOK_Out <= 0;
+            b_data_Out <= 0;
+        end
+        else
+        begin
+            b_operationOK_Out <= b_operation_OK;
+            b_data_Out <= b_data;
         end
     end
 endmodule

@@ -2,7 +2,7 @@
 
 # Memory Address Definitions
 .equ RAM_BASE, 0x40000000  # RAM Base Address (1 GiB)
-.equ IO_ADDR,  0x60000000   # IO Region Address (1.5 GiB)
+.equ IO_ADDR,  0xc0000000   # IO Region Address (3 GiB)
 .equ MAGIC_NUMBER_PASS, 0xF00DCAFE
 .equ MAGIC_NUMBER_FAIL, 0xDEADBEEF
 
