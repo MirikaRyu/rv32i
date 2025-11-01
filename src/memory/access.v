@@ -176,7 +176,7 @@ module Access
             `CONNECT_PORT(b)
     end
 
-    always @(posedge clk)
+    always @(negedge clk)
     begin
         if (rst)
         begin
@@ -190,7 +190,7 @@ module Access
         end
     end
 
-    always @(posedge clk)
+    always @(negedge clk)
     begin
         if (rst)
         begin

@@ -31,14 +31,15 @@ module Executor
         input wire [31 : 0] memData_In,
         input wire [`EXCEPTION_LEN - 1 : 0] memException_In,
 
-        // Execution lock
-        input wire execLockRead_In,
-        output reg execLockSet_Out,
+        // Sync with IF
+        output wire canWriteBack_In,
+        output wire instrIsConsumed_Out,
 
         output reg [`EXCEPTION_LEN - 1 : 0] exception_Out);
 
     reg try_access_mem;
     assign memAccess_Out = !memAccessOK_In && try_access_mem;
+    assign instrIsConsumed_Out = try_access_mem ? memAccessOK_In : 1'b1;
 
     reg [31 : 0] alu_inputA;
     reg [31 : 0] alu_inputB;
@@ -63,7 +64,7 @@ module Executor
     begin
         rdAddr_Out = rdAddr_In;
         rdWrite_Out = alu_result;
-        rdEnable_Out = ~execLockRead_In;
+        rdEnable_Out = canWriteBack_In;
 
         alu_op = `INSTR_ALU_NONE;
         alu_inputA = resource1_In;
@@ -80,7 +81,6 @@ module Executor
         memIsRead_Out = 1;
         try_access_mem = 0;
 
-        execLockSet_Out = memAccess_Out;
         exception_Out = memException_In;
 
         case (opCode_In)

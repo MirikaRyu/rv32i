@@ -6,15 +6,16 @@ module Core
     (input wire clk,
      input wire rst);
 
-    reg execution_lock;
     reg [`EXCEPTION_LEN - 1 : 0] exception;
     wire cpu_rst = rst || (exception != `EXCEP_ENV_BREAK && exception != `EXCEP_OK);
+    wire cpu_clk = (exception == `EXCEP_ENV_BREAK) ? 1'b1 : clk;
 
     wire [31 : 0] instruction;
     wire [31 : 0] pc;
+    wire instr_consumed;
     wire [31 : 0] pc_write;
     wire pc_flush;
-    wire if_exec_lock_set;
+    wire can_write_back;
     wire [31 : 0] if_mem_addr_out;
     wire [31 : 0] if_mem_data_out;
     wire [1 : 0] if_mem_data_width_out;
@@ -24,17 +25,16 @@ module Core
     wire [31 : 0] if_mem_data_in;
     wire [`EXCEPTION_LEN - 1 : 0] if_mem_exception_in;
     wire [`EXCEPTION_LEN - 1 : 0] if_exception;
-    InstructionFetch instr_fetch(.clk(clk),
+    InstructionFetch instr_fetch(.clk(cpu_clk),
                                  .rst(cpu_rst),
 
                                  .instr_Out(instruction),
                                  .pc_Out(pc),
+                                 .instrIsConsumed_In(instr_consumed),
 
                                  .pcWrite_In(pc_write),
                                  .pcFlush_In(pc_flush),
-
-                                 .execLockRead_In(execution_lock),
-                                 .execLockSet_Out(if_exec_lock_set),
+                                 .canWriteBack_Out(can_write_back),
 
                                  .memAddr_Out(if_mem_addr_out),
                                  .memData_Out(if_mem_data_out),
@@ -81,13 +81,12 @@ module Core
     wire [4 : 0] exec_rd_address;
     wire [31 : 0] rd_data;
     wire rd_enable;
-    wire ex_exec_lock_set;
     wire [31 : 0] ex_mem_addr_out;
     wire [31 : 0] ex_mem_data_out;
     wire [1 : 0] ex_mem_data_width_out;
     wire ex_mem_is_read_out;
     wire ex_mem_access_out;
-    wire ex_mem_ok_in; // loop-mark
+    wire ex_mem_ok_in;
     wire [31 : 0] ex_mem_data_in;
     wire [`EXCEPTION_LEN - 1 : 0] ex_mem_exception_in;
     wire [`EXCEPTION_LEN - 1 : 0] ex_exception;
@@ -115,12 +114,12 @@ module Core
                       .memData_In(ex_mem_data_in),
                       .memException_In(ex_mem_exception_in),
 
-                      .execLockRead_In(execution_lock),
-                      .execLockSet_Out(ex_exec_lock_set),
+                      .canWriteBack_In(can_write_back),
+                      .instrIsConsumed_Out(instr_consumed),
 
                       .exception_Out(ex_exception));
 
-    RegisterFile reg_file(.clk(clk),
+    RegisterFile reg_file(.clk(cpu_clk),
                           .rst(cpu_rst),
 
                           .rs1Addr_In(rs1_address),
@@ -142,7 +141,7 @@ module Core
     wire [31 : 0] rom_data_out;
     wire rom_ok_out;
     wire [`EXCEPTION_LEN - 1 : 0] rom_exception;
-    ROM rom(.clk(clk),
+    ROM rom(.clk(cpu_clk),
             .rst(cpu_rst),
 
             .addr_In(rom_addr_in),
@@ -162,7 +161,7 @@ module Core
     wire [31 : 0] ram_data_out;
     wire ram_ok_out;
     wire [`EXCEPTION_LEN - 1 : 0] ram_exception;
-    RAM ram(.clk(clk),
+    RAM ram(.clk(cpu_clk),
             .rst(cpu_rst),
 
             .addr_In(ram_addr_in),
@@ -184,7 +183,7 @@ module Core
     wire [31 : 0] io_data_out;
     wire io_ok_out;
     wire [`EXCEPTION_LEN - 1 : 0] io_exception;
-    IO io(.clk(clk),
+    IO io(.clk(cpu_clk),
           .rst(cpu_rst),
 
           .addr_In(io_addr_in),
@@ -198,7 +197,7 @@ module Core
 
           .exception_Out(io_exception));
 
-    Access access(.clk(clk),
+    Access access(.clk(cpu_clk),
                   .rst(cpu_rst),
 
                   .a_addr_In(if_mem_addr_out),
@@ -249,17 +248,6 @@ module Core
                   .IOFinish_In(io_ok_out),
                   .IOData_In(io_data_out),
                   .IOException_In(io_exception));
-
-    // Generate execution lock signal
-    always @(*)
-    begin
-        if (exception == `EXCEP_ENV_BREAK)
-            execution_lock = 1;
-        else if (if_exec_lock_set || ex_exec_lock_set)
-            execution_lock = 1;
-        else
-            execution_lock = 0;
-    end
 
     // Generate core exception
     always @(*)
