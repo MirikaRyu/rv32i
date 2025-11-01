@@ -60,5 +60,8 @@ target("io")
 target("fib")
     add_files("fib/fib.cpp")
 
+target("float")
+    add_files("float/float.cpp")
+
 target("exception")
     add_files("exception/exception.cpp")
