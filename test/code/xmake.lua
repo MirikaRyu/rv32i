@@ -5,7 +5,7 @@ toolchain("rv32i-gcc")
     set_toolset("cc", "riscv32-unknown-elf-gcc")
     set_toolset("cxx", "riscv32-unknown-elf-g++")
     set_toolset("as", "riscv32-unknown-elf-gcc")
-    set_toolset("ld", "riscv32-unknown-elf-ld")
+    set_toolset("ld", "riscv32-unknown-elf-g++")
     set_toolset("ar", "riscv32-unknown-elf-ar")
     set_toolset("strip", "riscv32-unknown-elf-strip")
     set_toolset("nm", "riscv32-unknown-elf-nm")
@@ -36,7 +36,7 @@ add_cxxflags(
 )
 add_ldflags(
     "-T".."$(projectdir)/test/code/link.ld",
-    "--print-memory-usage", "--gc-sections",
+    "-Wl,--print-memory-usage,--gc-sections,--no-warn-rwx-segments",
     {force = true}
 )
 
@@ -59,3 +59,6 @@ target("io")
 
 target("fib")
     add_files("fib/fib.cpp")
+
+target("exception")
+    add_files("exception/exception.cpp")
