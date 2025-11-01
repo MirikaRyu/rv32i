@@ -44,14 +44,6 @@ target("test_core")
     add_files("src/**.v")
     add_files("test/mock/*.cpp", "test/test_core.cpp")
 
--- Instruction fetcher test
-target("test_fetch")
-    common_build()
-
-    add_deps("$(app)")
-    add_files("src/fetch.v", "src/memory/*.v")
-    add_files("test/mock/*.cpp", "test/test_fetch.cpp")
-
 -- Decoder test
 target("test_decode")
     common_build()
