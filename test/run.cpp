@@ -22,7 +22,7 @@
 #include "test_app___024root.h"
 
 // Max iterations
-constexpr size_t max_iter = 0xffff;
+constexpr size_t max_iter = 0xfffff;
 
 int main(int argc, char *argv[])
 {
@@ -51,8 +51,15 @@ int main(int argc, char *argv[])
     auto pcpu = std::make_unique<test_app>();
     pcpu->trace(pwaveCreater.get(), 99);
 
-    const auto wave_file = std::format("timing_{}.vcd", std::filesystem::path{argv[1]}.stem().string());
+    const auto wave_file = std::format("timing_{}.vcd", std::filesystem::path{argv[2]}.stem().string());
     pwaveCreater->open((std::filesystem::path{argv[1]} / wave_file).c_str());
+
+    pcpu->clk = 1;
+    pcpu->rst = 1;
+    pcpu->eval();
+    pcpu->clk = 0;
+    pcpu->rst = 0;
+    pcpu->eval();
 
     for (const auto i : std::views::iota(0u, max_iter))
     {

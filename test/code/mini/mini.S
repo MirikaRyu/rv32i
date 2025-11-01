@@ -88,7 +88,7 @@ main:
     and x30, x30, x19       # x30 &= 0xF
     
     lb x20, 6(x5)           # x20 = 0xFFFFFFF1 (Sign-extended byte)
-    sltu x30, x30, x20      # x30 = 1 (0xF < 0xFFFFFFF1 unsigned)
+    sltu x30, x30, x20      # x30 = 1 (0xB < 0xFFFFFFF1 unsigned)
     
     lhu x21, 4(x5)          # x21 = 0x0000000F (Zero-extended half-word)
     add x30, x30, x21       # x30 = 1 + 0xF = 16 (0x10)

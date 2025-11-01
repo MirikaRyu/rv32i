@@ -1,5 +1,4 @@
 /* Test the functionality of MMIO */
-.text
 
 .global main
 main:

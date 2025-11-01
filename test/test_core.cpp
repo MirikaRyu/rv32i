@@ -58,6 +58,13 @@ int main(int argc, char *argv[])
 
     pwaveCreater->open((std::filesystem::path{argv[1]} / wave_file).c_str());
 
+    pcore->clk = 1;
+    pcore->rst = 1;
+    pcore->eval();
+    pcore->clk = 0;
+    pcore->rst = 0;
+    pcore->eval();
+
     bool success{};
     for (const auto i : std::views::iota(0u, max_iter))
     {
