@@ -46,8 +46,14 @@ set_kind("binary")
 add_files("entry.S")
 
 after_build(function (target)
+    -- Generate binary file
     local bin_file = path.join(target:targetdir(), path.basename(target:targetfile()) .. ".bin")
     os.vrunv("riscv32-unknown-elf-objcopy", {"-O", "binary", target:targetfile(), bin_file})
+
+    -- Generate hex text file for IP ROM
+    local hex_file = path.join(target:targetdir(), path.basename(target:targetfile()) .. ".dat")
+    local converter = path.join("tools", "convert.py")
+    os.vrunv("python", {converter, "-i", bin_file}, {stdout = hex_file})
 end)
 
 -- Bytecode targets
