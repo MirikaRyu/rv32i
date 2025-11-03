@@ -1,12 +1,9 @@
-/* Mock a Read-Only memory for instructions */
+`include "src/constants.v"
 
 // clang-format off
 import "DPI-C" function int rom_read(input shortint addr, input byte width);
 
-`include "src/constants.v"
-
-// Size: 64KiB
-module ROM
+module ROM // Size: 64KiB
     (input wire clk,
      input wire rst,
 
@@ -28,7 +25,7 @@ module ROM
         if (rst)
             operationOK_Out <= 0;
         else
-            operationOK_Out <= inputValid_In;
+            operationOK_Out <= inputValid_In; // Always delay 1 cycle
     end
 
     always @(posedge clk)

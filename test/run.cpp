@@ -22,7 +22,7 @@
 #include "test_app___024root.h"
 
 // Max iterations
-constexpr size_t max_iter = 0xfffff;
+constexpr size_t max_iter = 0x1fffff;
 
 int main(int argc, char *argv[])
 {
@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
         pcontext->timeInc(1);
         pwaveCreater->dump(pcontext->time());
 
-        if (pcpu->rootp->Core__DOT__instr_fetch__DOT__ir == 0x100073) // EBREAK
+        if (pcpu->rootp->Core__DOT__instruction == 0x100073) // EBREAK
             break;
     }
 

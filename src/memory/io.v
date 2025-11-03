@@ -1,15 +1,10 @@
-/* Mock a simple GPIO module */
+`include "src/constants.v"
 
 // clang-format off
 import "DPI-C" function int io_read(input int addr, input byte width);
 import "DPI-C" function void io_write(input int addr, input byte width, input int data);
 
-`include "src/constants.v"
-
-// Use exactly 1 cycle to write to device
-// Use devValue_In & devMask_In to decide which device to write
-// devState_Out is always the newest state of devices
-module IO
+module IO // Size: 4B
     (input wire clk,
      input wire rst,
 
@@ -40,7 +35,7 @@ module IO
         if (rst)
             operationOK_Out <= 0;
         else
-            operationOK_Out <= inputValid_In;
+            operationOK_Out <= inputValid_In; // Use exactly 1 cycle to do IO
     end
 
     always @(posedge clk)
@@ -51,7 +46,6 @@ module IO
             io_write(addr_In, {6'b0, dataWidth_In}, data_In);
     end
 
-    // Generate output data
     always @(posedge clk)
     begin
         if (rst)

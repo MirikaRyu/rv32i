@@ -1,22 +1,23 @@
-/* The register file of the core */
-
 module RegisterFile
     (input wire clk,
      input wire rst,
 
+     /* Interface rs1 */
      input wire [4 : 0] rs1Addr_In,
      output reg [31 : 0] rs1_Out,
      input wire rs1Enable_In,
 
+     /* Interface rs2 */
      input wire [4 : 0] rs2Addr_In,
      output reg [31 : 0] rs2_Out,
      input wire rs2Enable_In,
 
+     /* Interface rd */
      input wire [4 : 0] rdAddr_In,
      input wire [31 : 0] rd_In,
      input wire rdEnable_In);
 
-    // Registers
+    /* Registers declaration */
     reg [31 : 0] reg_x1;
     reg [31 : 0] reg_x2;
     reg [31 : 0] reg_x3;
@@ -49,6 +50,7 @@ module RegisterFile
     reg [31 : 0] reg_x30;
     reg [31 : 0] reg_x31;
 
+    /* Combinational read */
     always @(*)
     begin
         if (rs1Enable_In)
@@ -195,6 +197,7 @@ module RegisterFile
             rs2_Out = 0;
     end
 
+    /* Synchronous write */
     always @(posedge clk)
     begin
         if (rst)

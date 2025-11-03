@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
         pcontext->timeInc(1);
         pwaveCreater->dump(pcontext->time());
 
-        if (pcore->rootp->Core__DOT__instr_fetch__DOT__ir == 0x100073) // EBREAK: End of minimal test
+        if (pcore->rootp->Core__DOT__instruction == 0x100073) // EBREAK: End of minimal test
         {
             success =
                 (pcore->rootp->Core__DOT__reg_file__DOT__reg_x30 == 0xF00DCAFE); // Test success, defined in `mini.S`

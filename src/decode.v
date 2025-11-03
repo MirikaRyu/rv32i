@@ -1,35 +1,56 @@
-/* Decode instructions from IR */
-
 `include "constants.v"
 
-// Pure Combinational Logic
+`define INSTR_TYPE_R 3'h0
+`define INSTR_TYPE_I 3'h1
+`define INSTR_TYPE_S 3'h2
+`define INSTR_TYPE_B 3'h3
+`define INSTR_TYPE_U 3'h4
+`define INSTR_TYPE_J 3'h5
+`define INSTR_TYPE_NONE 3'h7
+
 module InstructionDecode
-    (input wire [31 : 0] instr_In,
+    (
+        /* `Decoder` is pure combinational logic */
 
-     output reg [4 : 0] rs1Addr_Out,
-     input wire [31 : 0] rs1_In,
-     output reg rs1Enable_Out,
+        /* Instruction input from frontend */
+        input wire [31 : 0] instr_In,
 
-     output reg [4 : 0] rs2Addr_Out,
-     input wire [31 : 0] rs2_In,
-     output reg rs2Enable_Out,
+        /* RS1 read interface */
+        output reg [4 : 0] rs1Addr_Out,
+        input wire [31 : 0] rs1_In,
+        output reg rs1Enable_Out,
 
-     output reg [5 : 0] opCode_Out,
-     output reg [4 : 0] rdAddr_Out,
-     output reg [31 : 0] resource1_Out,
-     output reg [31 : 0] resource2_Out,
-     output reg [31 : 0] offset_Out,
+        /* RS2 read interface */
+        output reg [4 : 0] rs2Addr_Out,
+        input wire [31 : 0] rs2_In,
+        output reg rs2Enable_Out,
 
-     output wire [`EXCEPTION_LEN - 1 : 0] exception_Out);
+        /* Opcode/Operand output */
+        output reg [5 : 0] opCode_Out,
+        output reg [4 : 0] rdAddr_Out,
+        output reg [31 : 0] resource1_Out,
+        output reg [31 : 0] resource2_Out,
+        output reg [31 : 0] offset_Out,
 
-    // Get the instruction type
+        /* Module exception out */
+        output wire [`EXCEPTION_LEN - 1 : 0] exception_Out);
+
+    /* Extract instruction fields */
+    wire [6 : 0] opcode = instr_In[6 : 0];
+    wire [4 : 0] rd_addr = instr_In[11 : 7];
+    wire [2 : 0] funct3 = instr_In[14 : 12];
+    wire [4 : 0] rs1_addr = instr_In[19 : 15];
+    wire [4 : 0] rs2_addr = instr_In[24 : 20];
+    wire [6 : 0] funct7 = instr_In[31 : 25];
+
+    /* Get instruction type */
     reg [2 : 0] instr_type;
     reg [`EXCEPTION_LEN - 1 : 0] type_exception;
     always @(*)
     begin
         type_exception = `EXCEP_OK;
 
-        casez (instr_In[6 : 0])
+        casez (opcode)
             7'b0110011:
                 instr_type = `INSTR_TYPE_R; // R-R operations
             7'b00?0011, 7'b1100111:
@@ -51,7 +72,7 @@ module InstructionDecode
         endcase
     end
 
-    // Generate immediate number and fill input data
+    /* Generate immediate number and output oprand */
     wire [31 : 0] imm;
     ImmediateGen imm_gen(.instr_In(instr_In),
                          .instrType_In(instr_type),
@@ -60,12 +81,12 @@ module InstructionDecode
     begin
         case (instr_type)
             `INSTR_TYPE_R: begin
-                rdAddr_Out = instr_In[11 : 7];
+                rdAddr_Out = rd_addr;
 
                 rs1Enable_Out = 1;
                 rs2Enable_Out = 1;
-                rs1Addr_Out = instr_In[19 : 15];
-                rs2Addr_Out = instr_In[24 : 20];
+                rs1Addr_Out = rs1_addr;
+                rs2Addr_Out = rs2_addr;
                 resource1_Out = rs1_In;
                 resource2_Out = rs2_In;
 
@@ -73,15 +94,16 @@ module InstructionDecode
             end
 
             `INSTR_TYPE_I: begin
-                rdAddr_Out = instr_In[11 : 7];
+                rdAddr_Out = rd_addr;
 
                 rs1Enable_Out = 1;
-                rs1Addr_Out = instr_In[19 : 15];
+                rs1Addr_Out = rs1_addr;
                 resource1_Out = rs1_In;
 
                 rs2Enable_Out = 0;
                 rs2Addr_Out = 0;
                 resource2_Out = imm;
+                // Note: LOAD/JALR are I-type instructions, their `offset` is in rs2
 
                 offset_Out = 0;
             end
@@ -91,8 +113,8 @@ module InstructionDecode
 
                 rs1Enable_Out = 1;
                 rs2Enable_Out = 1;
-                rs1Addr_Out = instr_In[19 : 15];
-                rs2Addr_Out = instr_In[24 : 20];
+                rs1Addr_Out = rs1_addr;
+                rs2Addr_Out = rs2_addr;
                 resource1_Out = rs1_In;
                 resource2_Out = rs2_In;
 
@@ -100,7 +122,7 @@ module InstructionDecode
             end
 
             `INSTR_TYPE_U: begin
-                rdAddr_Out = instr_In[11 : 7];
+                rdAddr_Out = rd_addr;
 
                 rs1Enable_Out = 0;
                 rs1Addr_Out = 0;
@@ -114,7 +136,7 @@ module InstructionDecode
             end
 
             `INSTR_TYPE_J: begin
-                rdAddr_Out = instr_In[11 : 7];
+                rdAddr_Out = rd_addr;
 
                 rs1Enable_Out = 0;
                 rs1Addr_Out = 0;
@@ -143,7 +165,7 @@ module InstructionDecode
         endcase
     end
 
-    // Get the opcode
+    /* Generate the opCode */
     reg [`EXCEPTION_LEN - 1 : 0] opcode_exception;
     always @(*)
     begin
@@ -152,8 +174,8 @@ module InstructionDecode
 
         case (instr_type)
             `INSTR_TYPE_R:
-                if (~|instr_In[31 : 25])     // funct7
-                    case (instr_In[14 : 12]) // funct3
+                if (~|funct7)
+                    case (funct3)
                         3'b000:
                             opCode_Out = `INSTR_OP_ADD;
                         3'b001:
@@ -173,8 +195,8 @@ module InstructionDecode
                         default:
                             opcode_exception = `EXCEP_ILLEGAL_INSTR;
                     endcase
-                else if (instr_In[31 : 25] == 7'b0100000)
-                    case (instr_In[14 : 12])
+                else if (funct7 == 7'b0100000)
+                    case (funct3)
                         3'b000:
                             opCode_Out = `INSTR_OP_SUB;
                         3'b101:
@@ -186,12 +208,12 @@ module InstructionDecode
                     opcode_exception = `EXCEP_ILLEGAL_INSTR;
 
             `INSTR_TYPE_I:
-                if (instr_In[6 : 0] == 7'b0010011) // OP
-                    case (instr_In[14 : 12])       // funct3
+                if (opcode == 7'b0010011) // R-R Operation
+                    case (funct3)
                         3'b000:
                             opCode_Out = `INSTR_OP_ADD;
                         3'b001:
-                            if (~|instr_In[31 : 25]) // imm
+                            if (~|funct7)
                                 opCode_Out = `INSTR_OP_LOGIC_SHIFT_L;
                             else
                             begin
@@ -205,7 +227,7 @@ module InstructionDecode
                         3'b100:
                             opCode_Out = `INSTR_OP_XOR;
                         3'b101:
-                            case (instr_In[31 : 25]) // imm
+                            case (funct7)
                                 7'b0000000:
                                     opCode_Out = `INSTR_OP_LOGIC_SHIFT_R;
                                 7'b0100000:
@@ -222,8 +244,8 @@ module InstructionDecode
                         default:
                             opcode_exception = `EXCEP_ILLEGAL_INSTR;
                     endcase
-                else if (instr_In[6 : 0] == 7'b0000011) // LOAD
-                    case (instr_In[14 : 12])            // funct3 / width
+                else if (opcode == 7'b0000011) // LOAD
+                    case (funct3)
                         3'b000:
                             opCode_Out = `INSTR_OP_LOAD_BYTE;
                         3'b001:
@@ -237,14 +259,14 @@ module InstructionDecode
                         default:
                             opcode_exception = `EXCEP_ILLEGAL_INSTR;
                     endcase
-                else                         // JALR
-                    if (~|instr_In[14 : 12]) // funct3
+                else // JALR
+                    if (~|funct3)
                         opCode_Out = `INSTR_OP_JMP_REG_LINK;
                     else
                         opcode_exception = `EXCEP_ILLEGAL_INSTR;
 
             `INSTR_TYPE_S:
-                case (instr_In[14 : 12]) // funct3
+                case (funct3)
                     3'b000:
                         opCode_Out = `INSTR_OP_STORE_BYTE;
                     3'b001:
@@ -256,7 +278,7 @@ module InstructionDecode
                 endcase
 
             `INSTR_TYPE_B:
-                case (instr_In[14 : 12]) // funct3
+                case (funct3)
                     3'b000:
                         opCode_Out = `INSTR_OP_BR_EQ;
                     3'b001:
@@ -274,20 +296,16 @@ module InstructionDecode
                 endcase
 
             `INSTR_TYPE_U:
-                case (instr_In[5])
-                    1'b0:
-                        opCode_Out = `INSTR_OP_AUIPC;
-                    1'b1:
-                        opCode_Out = `INSTR_OP_LUI;
-                    default:
-                        opcode_exception = `EXCEP_ILLEGAL_INSTR;
-                endcase
+                if (instr_In[5])
+                    opCode_Out = `INSTR_OP_LUI;
+                else
+                    opCode_Out = `INSTR_OP_AUIPC;
 
             `INSTR_TYPE_J:
                 opCode_Out = `INSTR_OP_JMP_LINK;
 
             `INSTR_TYPE_NONE:
-                case (instr_In[6 : 0])
+                case (opcode)
                     7'b1110011:
                         if (~|instr_In[31 : 7])
                             opCode_Out = `INSTR_OP_ECALL;
@@ -296,7 +314,7 @@ module InstructionDecode
                         else
                             opcode_exception = `EXCEP_ILLEGAL_INSTR;
                     7'b0001111:
-                        if (instr_In[14 : 12] == 3'b0)
+                        if (~|funct3)
                             opCode_Out = `INSTR_OP_FENCE;
                         else
                             opcode_exception = `EXCEP_ILLEGAL_INSTR;
@@ -309,7 +327,7 @@ module InstructionDecode
         endcase
     end
 
-    // Generate exception_out signal
+    /* Merge and generate module exception output */
     assign exception_Out = (opcode_exception == `EXCEP_OK) ? type_exception : opcode_exception;
 endmodule
 

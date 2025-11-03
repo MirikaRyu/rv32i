@@ -1,18 +1,19 @@
-/* Execute opCode generated from decoder */
-
 `include "constants.v"
 
 module Executor
     (
-        // Regs to write
+        /* `Exeuctor` is pure combinational logic */
+
+        /* PC update */
+        output reg [31 : 0] pcWrite_Out,
+        output reg pcFlush_Out,
+
+        /* Writeback to rd */
         output reg [4 : 0] rdAddr_Out,
         output reg [31 : 0] rdWrite_Out,
         output reg rdEnable_Out,
 
-        output reg [31 : 0] pcWrite_Out,
-        output reg pcFlush_Out,
-
-        // Opcode and operand
+        /* Opcode/Operand input */
         input wire [5 : 0] opCode_In,
         input wire [4 : 0] rdAddr_In,
         input wire [31 : 0] resource1_In,
@@ -20,34 +21,34 @@ module Executor
         input wire [31 : 0] offset_In,
         input wire [31 : 0] pc_In,
 
-        // Memory access
+        /* Memory access interface */
         output reg [31 : 0] memAddr_Out,
         output reg [31 : 0] memData_Out,
         output reg [1 : 0] memDataWidth_Out,
         output reg memIsRead_Out,
         output wire memAccess_Out,
-
         input wire memAccessOK_In,
         input wire [31 : 0] memData_In,
         input wire [`EXCEPTION_LEN - 1 : 0] memException_In,
 
-        // Sync with IF
-        output wire canWriteBack_In,
+        /* Synchronization with frontend */
+        input wire canWriteBack_In,
         output wire instrIsConsumed_Out,
 
+        /* Module exception out */
         output reg [`EXCEPTION_LEN - 1 : 0] exception_Out);
 
     reg try_access_mem;
-    assign memAccess_Out = !memAccessOK_In && try_access_mem;
-    assign instrIsConsumed_Out = try_access_mem ? memAccessOK_In : 1'b1;
+    assign memAccess_Out = !canWriteBack_In && try_access_mem;           // Keep data valid until writeback
+    assign instrIsConsumed_Out = try_access_mem ? memAccessOK_In : 1'b1; // Finish in 1 cycle when don't access memory
 
     reg [31 : 0] alu_inputA;
     reg [31 : 0] alu_inputB;
-    reg [3 : 0] alu_op;
+    reg [5 : 0] alu_op;
     wire [31 : 0] alu_result;
     ALU alu(.inputA_In(alu_inputA),
             .inputB_In(alu_inputB),
-            .funct_In(alu_op),
+            .opCode_In(alu_op),
 
             .result_Out(alu_result));
 
@@ -60,19 +61,22 @@ module Executor
 
                  .pc_Out(pc_alu_result));
 
+    /* Dispatch opCode */
     always @(*)
     begin
+        /* Set the default signal connection, override when needed */
+        alu_op = opCode_In;
+        alu_inputA = resource1_In;
+        alu_inputB = resource2_In;
+
+        pc_alu_input = offset_In;
+        pc_alu_add_offset = 0;
+
         rdAddr_Out = rdAddr_In;
         rdWrite_Out = alu_result;
         rdEnable_Out = canWriteBack_In;
 
-        alu_op = `INSTR_ALU_NONE;
-        alu_inputA = resource1_In;
-        alu_inputB = resource2_In;
-
         pcWrite_Out = pc_alu_result;
-        pc_alu_add_offset = 0;
-        pc_alu_input = offset_In;
         pcFlush_Out = 0;
 
         memAddr_Out = alu_result;
@@ -85,39 +89,33 @@ module Executor
 
         case (opCode_In)
             // Arithmetic instructions
-            `INSTR_OP_ADD:
-                alu_op = `INSTR_ALU_ADD;
-            `INSTR_OP_SUB:
-                alu_op = `INSTR_ALU_SUB;
-            `INSTR_OP_AND:
-                alu_op = `INSTR_ALU_AND;
-            `INSTR_OP_OR:
-                alu_op = `INSTR_ALU_OR;
-            `INSTR_OP_XOR:
-                alu_op = `INSTR_ALU_XOR;
-            `INSTR_OP_LOGIC_SHIFT_L:
-                alu_op = `INSTR_ALU_LOG_SFT_L;
-            `INSTR_OP_LOGIC_SHIFT_R:
-                alu_op = `INSTR_ALU_LOG_SHF_R;
-            `INSTR_OP_ARITH_SHIFT_R:
-                alu_op = `INSTR_ALU_ARI_SHF_R;
-            `INSTR_OP_CMP_LESS:
-                alu_op = `INSTR_ALU_CMP_LESS;
-            `INSTR_OP_CMP_LESS_UNSIGN:
-                alu_op = `INSTR_ALU_CMP_LESS_UNSIGN;
+            `INSTR_OP_ADD, `INSTR_OP_SUB:
+                ;
+            `INSTR_OP_AND, `INSTR_OP_OR, `INSTR_OP_XOR:
+                ;
+            `INSTR_OP_LOGIC_SHIFT_L, `INSTR_OP_LOGIC_SHIFT_R, `INSTR_OP_ARITH_SHIFT_R:
+                ;
+            `INSTR_OP_CMP_LESS, `INSTR_OP_CMP_LESS_UNSIGN:
+                ;
 
             // LUI and AUIPC
             `INSTR_OP_LUI:
                 rdWrite_Out = resource1_In;
 
             `INSTR_OP_AUIPC: begin
-                alu_op = `INSTR_ALU_PC_ADD;
-                alu_inputB = pc_In;
+                alu_op = `INSTR_OP_ADD;
+                alu_inputA = pc_In;
+                alu_inputB = 32'd4;
+                pcWrite_Out = alu_result;
+
+                pc_alu_input = 0;
+                pc_alu_add_offset = 1;
+                rdWrite_Out = pc_alu_result;
             end
 
             // Load and store
             `INSTR_OP_LOAD_WORD: begin
-                alu_op = `INSTR_ALU_ADD;
+                alu_op = `INSTR_OP_ADD;
 
                 memDataWidth_Out = `MEM_WIDTH_WORD;
                 rdWrite_Out = memData_In;
@@ -125,7 +123,7 @@ module Executor
             end
 
             `INSTR_OP_LOAD_HALF, `INSTR_OP_LOAD_HALF_UNSIGN: begin
-                alu_op = `INSTR_ALU_ADD;
+                alu_op = `INSTR_OP_ADD;
 
                 memDataWidth_Out = `MEM_WIDTH_HALF;
                 if (opCode_In == `INSTR_OP_LOAD_HALF)
@@ -136,7 +134,7 @@ module Executor
             end
 
             `INSTR_OP_LOAD_BYTE, `INSTR_OP_LOAD_BYTE_UNSIGN: begin
-                alu_op = `INSTR_ALU_ADD;
+                alu_op = `INSTR_OP_ADD;
 
                 memDataWidth_Out = `MEM_WIDTH_BYTE;
                 if (opCode_In == `INSTR_OP_LOAD_BYTE)
@@ -148,7 +146,7 @@ module Executor
 
             `INSTR_OP_STORE_WORD, `INSTR_OP_STORE_HALF, `INSTR_OP_STORE_BYTE: begin
                 alu_inputB = offset_In;
-                alu_op = `INSTR_ALU_ADD;
+                alu_op = `INSTR_OP_ADD;
                 rdEnable_Out = 0;
 
                 case (opCode_In)
@@ -181,9 +179,9 @@ module Executor
                 rdEnable_Out = 0;
 
                 if (opCode_In == `INSTR_OP_BR_LESS || opCode_In == `INSTR_OP_BR_GREATER)
-                    alu_op = `INSTR_ALU_CMP_LESS;
+                    alu_op = `INSTR_OP_CMP_LESS;
                 else
-                    alu_op = `INSTR_ALU_CMP_LESS_UNSIGN;
+                    alu_op = `INSTR_OP_CMP_LESS_UNSIGN;
 
                 if ((|alu_result ^ (opCode_In == `INSTR_OP_BR_GREATER || opCode_In == `INSTR_OP_BR_GREATER_UNSIGN)) ||
                     (~|alu_result ^ (opCode_In == `INSTR_OP_BR_LESS || opCode_In == `INSTR_OP_BR_LESS_UNSIGN)))
@@ -206,7 +204,7 @@ module Executor
             `INSTR_OP_JMP_REG_LINK: begin
                 rdWrite_Out = pc_In;
 
-                alu_op = `INSTR_ALU_ADD;
+                alu_op = `INSTR_OP_ADD;
 
                 pcWrite_Out = alu_result & ~32'b1;
                 pcFlush_Out = 1;
@@ -228,7 +226,7 @@ module Executor
 
             // FENCE
             `INSTR_OP_FENCE:
-                rdWrite_Out = 0;
+                rdWrite_Out = 0; // No need to implement
 
             default: begin
                 rdWrite_Out = 0;
@@ -241,41 +239,38 @@ endmodule
 module ALU
     (input wire [31 : 0] inputA_In,
      input wire [31 : 0] inputB_In,
-     input wire [3 : 0] funct_In,
+     input wire [5 : 0] opCode_In,
 
      output reg [31 : 0] result_Out);
 
-    wire [31 : 0] sub_result;
-    assign sub_result = inputA_In - inputB_In;
+    wire [31 : 0] sub_result = inputA_In - inputB_In;
 
     always @(*)
     begin
-        case (funct_In)
-            `INSTR_ALU_ADD:
+        case (opCode_In)
+            `INSTR_OP_ADD:
                 result_Out = inputA_In + inputB_In;
-            `INSTR_ALU_SUB:
+            `INSTR_OP_SUB:
                 result_Out = sub_result;
-            `INSTR_ALU_AND:
+            `INSTR_OP_AND:
                 result_Out = inputA_In & inputB_In;
-            `INSTR_ALU_OR:
+            `INSTR_OP_OR:
                 result_Out = inputA_In | inputB_In;
-            `INSTR_ALU_XOR:
+            `INSTR_OP_XOR:
                 result_Out = inputA_In ^ inputB_In;
-            `INSTR_ALU_LOG_SFT_L:
+            `INSTR_OP_LOGIC_SHIFT_L:
                 result_Out = inputA_In << inputB_In[4 : 0];
-            `INSTR_ALU_LOG_SHF_R:
+            `INSTR_OP_LOGIC_SHIFT_R:
                 result_Out = inputA_In >> inputB_In[4 : 0];
-            `INSTR_ALU_ARI_SHF_R:
+            `INSTR_OP_ARITH_SHIFT_R:
                 result_Out = $signed(inputA_In) >>> inputB_In[4 : 0];
-            `INSTR_ALU_CMP_LESS:
+            `INSTR_OP_CMP_LESS:
                 if (inputA_In[31] == inputB_In[31])
                     result_Out = sub_result[31] ? 32'b1 : 0;
                 else
                     result_Out = inputA_In[31] ? 32'b1 : 0;
-            `INSTR_ALU_CMP_LESS_UNSIGN:
+            `INSTR_OP_CMP_LESS_UNSIGN:
                 result_Out = (inputA_In < inputB_In) ? 32'b1 : 0;
-            `INSTR_ALU_PC_ADD:
-                result_Out = inputA_In + inputB_In - 4;
             default:
                 result_Out = 0;
         endcase

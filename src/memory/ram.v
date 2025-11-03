@@ -1,16 +1,13 @@
-/* Mock a Random-Access memory for data */
+`include "src/constants.v"
 
 // clang-format off
-// Only low 29 bits of addr are valid, width follows the def in `constants.v`
-// Only `width` bits of input data is valid
-// The valid bits of return value is decided by `width`
+/* Note: Only low 29 bits of addr are valid, and width follows the definition in `constants.v` */
+/* Note: Only `width` bits of input data is valid */
+/* The valid bits of return value is decided by `width` */
 import "DPI-C" function int ram_read(input int addr, input byte width);
 import "DPI-C" function void ram_write(input int addr, input byte width, input int data);
 
-`include "src/constants.v"
-
-// Size: 512MiB
-module RAM
+module RAM // Size: 512MiB
     (input wire clk,
      input wire rst,
 
@@ -41,7 +38,7 @@ module RAM
         if (rst)
             operationOK_Out <= 0;
         else
-            operationOK_Out <= inputValid_In;
+            operationOK_Out <= inputValid_In; // Always delay 1 cycle
     end
 
     always @(posedge clk)
