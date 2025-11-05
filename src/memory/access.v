@@ -19,7 +19,7 @@
         end                                                                                                            \
         else                                                                                                           \
         begin                                                                                                          \
-            port``_operationOK_Out <= port``_inputValid_In && port``_operation_OK;                                     \
+            port``_operationOK_Out <= port``_operation_OK;                                                             \
             port``_data_Out <= port``_data;                                                                            \
         end                                                                                                            \
     end
@@ -179,41 +179,47 @@ module Access
 
     /* State transfers */
     reg [1 : 0] state;
+    reg [1 : 0] next_state;
     always @(posedge clk)
     begin
         if (rst)
             state <= `STATE_IDLE;
         else
-            case (state)
-                `STATE_IDLE:
-                    if (a_inputValid_In && b_inputValid_In && a_access_type != b_access_type)
-                        state <= `STATE_AB;
-                    else if (a_inputValid_In)
-                        state <= `STATE_A;
-                    else if (b_inputValid_In)
-                        state <= `STATE_B;
-                    else
-                        state <= `STATE_IDLE;
-                `STATE_A:
-                    if (b_inputValid_In && a_access_type != b_access_type)
-                        state <= a_inputValid_In ? `STATE_AB : `STATE_B;
-                    else
-                        state <= a_inputValid_In ? `STATE_A : `STATE_IDLE;
-                `STATE_B:
-                    if (a_inputValid_In && a_access_type != b_access_type)
-                        state <= b_inputValid_In ? `STATE_AB : `STATE_A;
-                    else
-                        state <= b_inputValid_In ? `STATE_B : `STATE_IDLE;
-                `STATE_AB:
-                    if (a_inputValid_In && b_inputValid_In)
-                        state <= `STATE_AB;
-                    else if (a_inputValid_In)
-                        state <= `STATE_A;
-                    else if (b_inputValid_In)
-                        state <= `STATE_B;
-                    else
-                        state <= `STATE_IDLE;
-            endcase
+            state <= next_state;
+    end
+
+    always @(*)
+    begin
+        case (state)
+            `STATE_IDLE:
+                if (a_inputValid_In && b_inputValid_In && a_access_type != b_access_type)
+                    next_state = `STATE_AB;
+                else if (a_inputValid_In)
+                    next_state = `STATE_A;
+                else if (b_inputValid_In)
+                    next_state = `STATE_B;
+                else
+                    next_state = `STATE_IDLE;
+            `STATE_A:
+                if (b_inputValid_In && a_access_type != b_access_type)
+                    next_state = a_inputValid_In ? `STATE_AB : `STATE_B;
+                else
+                    next_state = a_inputValid_In ? `STATE_A : `STATE_IDLE;
+            `STATE_B:
+                if (a_inputValid_In && a_access_type != b_access_type)
+                    next_state = b_inputValid_In ? `STATE_AB : `STATE_A;
+                else
+                    next_state = b_inputValid_In ? `STATE_B : `STATE_IDLE;
+            `STATE_AB:
+                if (a_inputValid_In && b_inputValid_In)
+                    next_state = `STATE_AB;
+                else if (a_inputValid_In)
+                    next_state = `STATE_A;
+                else if (b_inputValid_In)
+                    next_state = `STATE_B;
+                else
+                    next_state = `STATE_IDLE;
+        endcase
     end
 
     always @(*)
@@ -229,14 +235,31 @@ module Access
         a_data = (b_data = 0);
 
         /* Actions on specific state */
-        if (state == `STATE_A)
-            `CONNECT(a)
-        else if (state == `STATE_B)
-            `CONNECT(b)
-        else if (state == `STATE_AB)
-        begin
-            `CONNECT(a)
-            `CONNECT(b)
-        end
+        case (state)
+            `STATE_IDLE:
+                if (next_state == `STATE_AB)
+                begin
+                    `CONNECT(a)
+                    `CONNECT(b)
+                end
+                else if (next_state == `STATE_A)
+                    `CONNECT(a)
+                else if (next_state == `STATE_B)
+                    `CONNECT(b)
+            `STATE_A:
+                if (next_state == `STATE_AB || next_state == `STATE_B)
+                    `CONNECT(b)
+                else
+                    `CONNECT(a)
+            `STATE_B:
+                if (next_state == `STATE_AB || next_state == `STATE_A)
+                    `CONNECT(a)
+                else
+                    `CONNECT(b)
+            `STATE_AB: begin
+                `CONNECT(a)
+                `CONNECT(b)
+            end
+        endcase
     end
 endmodule
