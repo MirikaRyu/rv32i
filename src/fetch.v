@@ -21,10 +21,10 @@ module InstructionFetch
      output wire canWriteBack_Out,
 
      /* Memory access interface */
-     output reg [31 : 0] memAddr_Out,
-     output reg [31 : 0] memData_Out,
-     output reg [1 : 0] memDataWidth_Out,
-     output reg memIsRead_Out,
+     output wire [31 : 0] memAddr_Out,
+     output wire [31 : 0] memData_Out,
+     output wire [1 : 0] memDataWidth_Out,
+     output wire memIsRead_Out,
      output wire memAccess_Out,
      input wire memAccessOK_In,
      input wire [31 : 0] memData_In,
